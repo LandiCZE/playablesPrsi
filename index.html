@@ -47,11 +47,11 @@
     color: #fff;
     cursor: pointer;
   }
-  #mute { right: 62px; }
+  #lang { right: auto; left: 12px; }
 
   /* ---- Opponents ---- */
   #opps-area { padding: 4px 0 0; }
-  #score { text-align: center; font-size: 0.78rem; color: var(--gold); font-weight: 700; margin-bottom: 4px; min-height: 16px; }
+  #score { text-align: center; font-size: 0.78rem; color: var(--gold); font-weight: 700; margin-bottom: 4px; min-height: 16px; padding: 0 58px; }
   .opp { position: absolute; text-align: center; z-index: 5; }
   .opp .opp-label { font-size: 0.78rem; opacity: 0.85; font-weight: 600; margin-bottom: 4px; }
   .opp.turn .opp-label { color: var(--gold); opacity: 1; }
@@ -291,6 +291,8 @@
   .overlay.show .sheet { animation: sheetIn 0.24s ease; }
   @keyframes sheetIn { from { transform: scale(0.92); opacity: 0; } }
 
+  body.paused *, body.paused *::after { animation-play-state: paused !important; }
+
   @media (prefers-reduced-motion: reduce) {
     #deck.pulse::after { animation: none; opacity: 0; }
     #discard .card.land, #hand .card.enter, .opp.turn .opp-cards, .overlay.show .sheet { animation: none; }
@@ -369,17 +371,22 @@
 /* =========================================================
    YouTube Playables SDK — guarded; game also runs standalone
    ========================================================= */
-const YT = typeof window.ytgame !== "undefined" ? window.ytgame : null;
+const YT = (typeof window.ytgame !== "undefined" && window.ytgame.IN_PLAYABLES_ENV) ? window.ytgame : null;
+let paused = false;
 if (YT) {
   try { YT.game.firstFrameReady(); } catch (e) {}
-  try { YT.system.onPause(() => saveState()); } catch (e) {}
-  try { YT.system.onResume(() => {}); } catch (e) {}
+  try { YT.system.onPause(onPause); } catch (e) {}
+  try { YT.system.onResume(onResume); } catch (e) {}
+  const logErr = () => { try { YT.health.logError(); } catch (e) {} };
+  window.addEventListener("error", logErr);
+  window.addEventListener("unhandledrejection", logErr);
 }
 
 /* =========================================================
    i18n
    ========================================================= */
-let LANG = (navigator.language || "en").toLowerCase().startsWith("cs") ? "cs" : "en";
+let LANG = "en"; // resolved in loadState (Playables forbids navigator.language)
+const pickLang = tag => String(tag || "en").toLowerCase().startsWith("cs") ? "cs" : "en";
 
 const T = {
   cs: {
@@ -518,6 +525,7 @@ let PCOUNT = 2;
 let M = { wins: [0, 0] };
 let G = null;
 let roundToken = 0;
+let roundsWon = 0; // lifetime rounds won — the score sent to YouTube
 
 function pName(i) {
   if (i === 0) return t().you;
@@ -604,9 +612,39 @@ function advance() {
   if (G.turn === 0) {
     if (G.pendingDraw === 0 && !G.acePending) setStatusIfQuiet();
   } else {
-    const token = roundToken;
-    setTimeout(() => { if (token === roundToken) botAct(G.turn); }, 850);
+    scheduleBot();
   }
+}
+
+/* =========================================================
+   Pause / resume — Playables requires halting all execution
+   ========================================================= */
+let botTimer = null;
+function scheduleBot() {
+  clearTimeout(botTimer);
+  botTimer = null;
+  if (paused || !G || G.over || G.turn === 0) return;
+  const token = roundToken, who = G.turn;
+  botTimer = setTimeout(() => {
+    botTimer = null;
+    if (token === roundToken && !paused) botAct(who);
+  }, 850);
+}
+
+function onPause() {
+  paused = true;
+  clearTimeout(botTimer);
+  botTimer = null;
+  document.body.classList.add("paused");
+  syncAudio();
+  saveState();
+}
+
+function onResume() {
+  paused = false;
+  document.body.classList.remove("paused");
+  syncAudio();
+  scheduleBot();
 }
 
 let lastAnnounced = false;
@@ -616,7 +654,7 @@ function setStatusIfQuiet() { /* keep last announcement visible */ }
    Human turn
    ========================================================= */
 function playerPlay(idx) {
-  if (G.turn !== 0 || G.over) return;
+  if (paused || G.turn !== 0 || G.over) return;
   const card = G.hands[0][idx];
   if (!playable(card)) return;
 
@@ -646,7 +684,7 @@ function confirmSuit(suitId) {
 }
 
 function playerDrawOrStand() {
-  if (G.turn !== 0 || G.over) return;
+  if (paused || G.turn !== 0 || G.over) return;
   if (G.acePending) {
     G.acePending = false;
     setStatus(t().youStand);
@@ -734,8 +772,11 @@ function botAct(i) {
    ========================================================= */
 function endRound(winnerIdx) {
   M.wins[winnerIdx]++;
+  if (winnerIdx === 0) roundsWon++;
   saveState();
-  if (YT) { try { YT.game.sendScore({ value: M.wins[0] }); } catch (e) {} }
+  if (YT && winnerIdx === 0) {
+    try { YT.engagement.sendScore({ value: roundsWon }).catch(() => {}); } catch (e) {}
+  }
 
   const matchOver = M.wins[winnerIdx] >= TARGET;
   const youWon = winnerIdx === 0;
@@ -752,24 +793,28 @@ function endRound(winnerIdx) {
 }
 
 /* =========================================================
-   Persistence — Playables cloud save, window.storage fallback
+   Persistence — Playables cloud save only; localStorage when standalone
    ========================================================= */
 const SAVE_KEY = "prsi-save";
-function stateJson() { return JSON.stringify({ v: 2, lang: LANG, pcount: PCOUNT, sound: soundOn, theme: THEME, back: BACK }); }
+let loaded = false; // Playables: loadData must complete before any saveData
+function stateJson() { return JSON.stringify({ v: 3, lang: LANG, pcount: PCOUNT, sound: soundOn, theme: THEME, back: BACK, roundsWon }); }
 
 async function saveState() {
+  if (!loaded) return;
   const json = stateJson();
-  if (YT) { try { await YT.game.saveData(json); return; } catch (e) {} }
-  if (typeof window.storage !== "undefined") {
-    try { await window.storage.set(SAVE_KEY, json); } catch (e) {}
-  }
+  if (YT) { try { await YT.game.saveData(json); } catch (e) {} return; }
+  try { localStorage.setItem(SAVE_KEY, json); } catch (e) {}
 }
 
 async function loadState() {
   let json = null;
-  if (YT) { try { json = await YT.game.loadData(); } catch (e) {} }
-  if (!json && typeof window.storage !== "undefined") {
-    try { const r = await window.storage.get(SAVE_KEY); if (r && r.value) json = r.value; } catch (e) {}
+  if (YT) {
+    try { LANG = pickLang(await YT.system.getLanguage()); } catch (e) {}
+    try { json = await YT.game.loadData(); loaded = true; } catch (e) {} // on failure never overwrite the cloud save
+  } else {
+    LANG = pickLang(navigator.language);
+    try { json = localStorage.getItem(SAVE_KEY); } catch (e) {}
+    loaded = true;
   }
   if (!json) return;
   try {
@@ -779,6 +824,7 @@ async function loadState() {
     if (d && typeof d.sound === "boolean") soundOn = d.sound;
     if (d && THEMES.some(x => x.id === d.theme)) THEME = d.theme;
     if (d && BACKS.some(x => x.id === d.back)) BACK = d.back;
+    if (d && Number.isSafeInteger(d.roundsWon) && d.roundsWon >= 0) roundsWon = d.roundsWon;
   } catch (e) {}
 }
 
@@ -838,10 +884,18 @@ if (YT) {
     const v = YT.system.isAudioEnabled;
     ytAudioOk = typeof v === "function" ? !!YT.system.isAudioEnabled() : !!v;
   } catch (e) {}
-  try { YT.system.onAudioEnabledChange(en => { ytAudioOk = !!en; }); } catch (e) {}
+  try { YT.system.onAudioEnabledChange(en => { ytAudioOk = !!en; syncAudio(); }); } catch (e) {}
 }
 
-function audioAllowed() { return soundOn && ytAudioOk; }
+function audioAllowed() { return soundOn && ytAudioOk && !paused; }
+
+function syncAudio() {
+  if (!actx) return;
+  try {
+    if (audioAllowed()) { if (actx.state === "suspended") actx.resume().catch(() => {}); }
+    else if (actx.state === "running") actx.suspend().catch(() => {});
+  } catch (e) {}
+}
 
 function ensureCtx() {
   const AC = window.AudioContext || window.webkitAudioContext;
@@ -852,7 +906,7 @@ function ensureCtx() {
     master.gain.value = 0.5;
     master.connect(actx.destination);
   }
-  if (actx.state === "suspended") actx.resume();
+  if (actx.state === "suspended" && audioAllowed()) actx.resume().catch(() => {});
   return actx;
 }
 document.addEventListener("pointerdown", () => ensureCtx(), { once: true, capture: true });
@@ -1140,8 +1194,18 @@ $("mute").addEventListener("pointerdown", e => {
   saveState();
 });
 
-/* re-layout the fan when the screen size changes */
-window.addEventListener("resize", () => { if (G) render(); });
+/* scale the table down on short viewports (landscape phones) so the hand stays on screen */
+const DESIGN_H = 500;
+function fitApp() {
+  const vh = window.innerHeight;
+  if (!(vh > 0)) return; // Playables may start at zero size
+  const z = Math.min(1, vh / DESIGN_H);
+  $("app").style.zoom = z;
+  $("app").style.height = (vh / z) + "px";
+}
+
+/* re-layout when the screen size changes */
+window.addEventListener("resize", () => { fitApp(); if (G) render(); });
 
 /* suit picker */
 function openSuitPicker() {
@@ -1156,6 +1220,14 @@ function openSuitPicker() {
   $("suit-overlay").classList.add("show");
 }
 function closeSuitPicker() { $("suit-overlay").classList.remove("show"); }
+
+/* Esc cancels the suit picker (no preventDefault — Playables requirement) */
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && $("suit-overlay").classList.contains("show")) {
+    closeSuitPicker();
+    pendingSvrsekIdx = null;
+  }
+});
 
 /* round / match continue */
 $("again").addEventListener("pointerdown", e => {
@@ -1173,6 +1245,8 @@ $("again").addEventListener("pointerdown", e => {
    Boot — menu first; menu is the gameReady moment
    ========================================================= */
 loadState().then(() => {
+  if (YT) { soundOn = true; $("mute").hidden = true; } // YouTube's own mute is the control inside Playables
+  fitApp();
   applyTheme();
   applyBack();
   renderStatic();
