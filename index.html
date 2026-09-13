@@ -33,7 +33,7 @@
   }
   #app { display: flex; flex-direction: column; height: 100dvh; max-width: 480px; margin: 0 auto; padding: 10px 0; }
 
-  #lang, #mute {
+  #lang, #mute, #help {
     position: fixed;
     top: 10px; right: 12px;
     z-index: 30;
@@ -48,10 +48,13 @@
     cursor: pointer;
   }
   #lang { right: auto; left: 12px; }
+  #help { right: auto; left: 60px; min-width: 30px; padding: 6px 0; }
 
   /* ---- Opponents ---- */
   #opps-area { padding: 4px 0 0; }
-  #score { text-align: center; font-size: 0.78rem; color: var(--gold); font-weight: 700; margin-bottom: 4px; min-height: 16px; padding: 0 58px; }
+  #score { text-align: center; font-size: 0.78rem; color: var(--gold); font-weight: 700; margin-bottom: 4px; min-height: 16px; }
+  /* narrow screens: drop the score below the corner buttons instead of squeezing between them */
+  @media (max-width: 700px) { #score { margin-top: 30px; } }
   .opp { position: absolute; text-align: center; z-index: 5; }
   .opp .opp-label { font-size: 0.78rem; opacity: 0.85; font-weight: 600; margin-bottom: 4px; }
   .opp.turn .opp-label { color: var(--gold); opacity: 1; }
@@ -262,6 +265,30 @@
   }
   .swatch-card:active { transform: scale(0.9); }
   .swatch-card.sel { box-shadow: 0 0 0 3px var(--gold); }
+  .sheet .link {
+    border: none;
+    background: none;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--red);
+    text-decoration: underline;
+    margin-top: 16px;
+    cursor: pointer;
+  }
+  #rules-overlay { z-index: 25; }
+  .sheet.rules { max-height: calc(100dvh - 32px); overflow-y: auto; }
+  #rules-list { list-style: none; text-align: left; margin-bottom: 18px; }
+  #rules-list li { display: flex; gap: 12px; align-items: flex-start; font-size: 0.9rem; line-height: 1.35; color: #4A3E31; margin-bottom: 10px; }
+  #rules-list .chip {
+    flex: none;
+    width: 30px; height: 40px;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.95rem; color: var(--ink);
+  }
   #result-emoji { font-size: 3rem; margin-bottom: 8px; }
   #result-score { font-size: 1.1rem; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
 
@@ -302,6 +329,7 @@
 </head>
 <body>
 <button id="lang">EN</button>
+<button id="help">?</button>
 <button id="mute">🔊</button>
 <div id="app">
   <div id="opps-area">
@@ -341,6 +369,16 @@
     <div class="swatches" id="theme-buttons"></div>
     <p class="mini" id="back-label"></p>
     <div class="swatches" id="back-buttons"></div>
+    <button class="link" id="menu-rules"></button>
+  </div>
+</div>
+
+<!-- Rules -->
+<div class="overlay" id="rules-overlay">
+  <div class="sheet rules">
+    <h2 id="rules-title"></h2>
+    <ul id="rules-list"></ul>
+    <button class="big" id="rules-close"></button>
   </div>
 </div>
 
@@ -421,6 +459,17 @@ const T = {
     nextRound: "Další kolo",
     newMatch: "Nový zápas",
     firstTo: n => "hraje se na " + n + " vítězná kola",
+    rulesLink: "Jak se hraje?",
+    rulesTitle: "Pravidla",
+    rulesOk: "Rozumím",
+    rules: [
+      ["🃏", "Každý dostane 4 karty. Zahraj kartu stejné <b>barvy</b> nebo stejné <b>hodnoty</b> jako vrchní karta."],
+      ["➕", "Nemáš co zahrát? Klepni na <b>Lízat</b> a vezmi si kartu. Lízat můžeš i místo hraní."],
+      ["7", "<b>Sedma</b> — další hráč líže 2 karty, pokud nepřebije další sedmou. Sedmy se sčítají: 4, 6, 8…"],
+      ["A", "<b>Eso</b> — další hráč stojí, pokud nepřebije dalším esem."],
+      ["Sv", "<b>Svršek</b> — jde na jakoukoli kartu a vybereš si novou barvu."],
+      ["🏆", "Kdo se první zbaví všech karet, bere kolo. Kdo první vyhraje 3 kola, vyhrává zápas."],
+    ],
     ranks: { "7": ["7", ""], "8": ["8", ""], "9": ["9", ""], "10": ["10", ""],
              spodek: ["Sp", "spodek"], svrsek: ["Sv", "svršek"], kral: ["K", "král"], eso: ["A", "eso"] },
   },
@@ -456,6 +505,17 @@ const T = {
     nextRound: "Next round",
     newMatch: "New match",
     firstTo: n => "first to " + n + " rounds wins",
+    rulesLink: "How to play",
+    rulesTitle: "How to play",
+    rulesOk: "Got it",
+    rules: [
+      ["🃏", "Everyone gets 4 cards. Play a card matching the <b>suit</b> or the <b>rank</b> of the top card."],
+      ["➕", "Can't play? Tap <b>Draw</b> to take a card. You can also draw instead of playing."],
+      ["7", "<b>Seven</b> — the next player draws 2, unless they play another seven. Sevens stack: 4, 6, 8…"],
+      ["A", "<b>Ace</b> — the next player skips a turn, unless they play another ace."],
+      ["O", "<b>Over</b> — goes on any card and lets you pick the new suit."],
+      ["🏆", "Empty your hand first to take the round. First to win 3 rounds wins the match."],
+    ],
     ranks: { "7": ["7", ""], "8": ["8", ""], "9": ["9", ""], "10": ["10", ""],
              spodek: ["U", "under"], svrsek: ["O", "over"], kral: ["K", "king"], eso: ["A", "ace"] },
   },
@@ -623,11 +683,11 @@ let botTimer = null;
 function scheduleBot() {
   clearTimeout(botTimer);
   botTimer = null;
-  if (paused || !G || G.over || G.turn === 0) return;
+  if (paused || rulesOpen() || !G || G.over || G.turn === 0) return;
   const token = roundToken, who = G.turn;
   botTimer = setTimeout(() => {
     botTimer = null;
-    if (token === roundToken && !paused) botAct(who);
+    if (token === roundToken && !paused && !rulesOpen()) botAct(who);
   }, 850);
 }
 
@@ -1001,6 +1061,13 @@ function renderStatic() {
   $("suit-title").textContent = t().suitTitle;
   $("suit-sub").textContent = t().suitSub;
   $("menu-sub").textContent = t().menuSub;
+  $("help").setAttribute("aria-label", t().rulesTitle);
+  $("menu-rules").textContent = t().rulesLink;
+  $("rules-title").textContent = t().rulesTitle;
+  $("rules-close").textContent = t().rulesOk;
+  $("rules-list").innerHTML = t().rules
+    .map(([chip, text]) => '<li><span class="chip">' + chip + "</span><span>" + text + "</span></li>")
+    .join("");
   const wrap = $("player-buttons");
   wrap.innerHTML = "";
   [2, 3, 4].forEach(n => {
@@ -1221,9 +1288,31 @@ function openSuitPicker() {
 }
 function closeSuitPicker() { $("suit-overlay").classList.remove("show"); }
 
-/* Esc cancels the suit picker (no preventDefault — Playables requirement) */
+/* rules sheet — bots wait while it is open */
+function rulesOpen() { return $("rules-overlay").classList.contains("show"); }
+function openRules() {
+  clearTimeout(botTimer);
+  botTimer = null;
+  $("rules-overlay").classList.add("show");
+}
+function closeRules() {
+  $("rules-overlay").classList.remove("show");
+  scheduleBot();
+}
+$("help").addEventListener("pointerdown", e => {
+  e.preventDefault();
+  SFX.tap();
+  if (rulesOpen()) closeRules(); else openRules();
+});
+$("menu-rules").addEventListener("pointerdown", e => { e.preventDefault(); SFX.tap(); openRules(); });
+$("rules-close").addEventListener("pointerdown", e => { e.preventDefault(); SFX.tap(); closeRules(); });
+
+/* Esc closes the rules sheet or cancels the suit picker (no preventDefault — Playables requirement) */
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && $("suit-overlay").classList.contains("show")) {
+  if (e.key !== "Escape") return;
+  if (rulesOpen()) {
+    closeRules();
+  } else if ($("suit-overlay").classList.contains("show")) {
     closeSuitPicker();
     pendingSvrsekIdx = null;
   }
