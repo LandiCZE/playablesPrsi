@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Prší — Czech Card Game</title>
+<!-- YouTube Playables SDK — must load before game code (per Playables cert requirements).
+     Outside YouTube this fails harmlessly; all ytgame calls below are guarded. -->
+<script src="https://www.youtube.com/game_api/v1"></script>
+<style>
+  :root {
+    --table: #2E6B4F;
+    --table-dark: #24553F;
+    --card-face: #FBF7EE;
+    --ink: #2A2118;
+    --red: #C4342B;
+    --green: #3E7A34;
+    --amber: #C98A1B;
+    --brown: #7A5230;
+    --gold: #F2C94C;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif;
+    background: radial-gradient(circle at 50% 30%, var(--table), var(--table-dark));
+    color: #fff;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  #app { display: flex; flex-direction: column; height: 100dvh; max-width: 480px; margin: 0 auto; padding: 10px 0; }
+
+  #lang, #mute {
+    position: fixed;
+    top: 10px; right: 12px;
+    z-index: 30;
+    border: none;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.75rem;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.18);
+    color: #fff;
+    cursor: pointer;
+  }
+  #mute { right: 62px; }
+
+  /* ---- Opponents ---- */
+  #opps-area { padding: 4px 0 0; }
+  #score { text-align: center; font-size: 0.78rem; color: var(--gold); font-weight: 700; margin-bottom: 4px; min-height: 16px; }
+  .opp { position: absolute; text-align: center; z-index: 5; }
+  .opp .opp-label { font-size: 0.78rem; opacity: 0.85; font-weight: 600; margin-bottom: 4px; }
+  .opp.turn .opp-label { color: var(--gold); opacity: 1; }
+  .opp .opp-cards { display: flex; justify-content: center; height: 46px; }
+  .opp.vert .opp-cards { flex-direction: column; align-items: center; height: auto; min-height: 46px; }
+  .opp.vert .back { margin: -30px 0 0; }
+  .opp.vert .back:first-child { margin-top: 0; }
+  .seat-top { top: 4px; left: 50%; transform: translateX(-50%); }
+  .seat-topleft { top: 4px; left: 12px; }
+  .seat-topright { top: 4px; right: 12px; }
+  .seat-left { left: 8px; top: 50%; transform: translateY(-50%); }
+  .seat-right { right: 8px; top: 50%; transform: translateY(-50%); }
+  .back {
+    width: 32px; height: 44px;
+    border-radius: 6px;
+    background: var(--back-bg, repeating-linear-gradient(45deg, #8A2B23 0 5px, #A03A30 5px 10px));
+    border: 2px solid #F3E4C8;
+    margin: 0 -10px;
+  }
+
+  /* ---- Table center ---- */
+  #table {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+    position: relative;
+    padding: 70px 52px 10px;
+  }
+  .pile { text-align: center; }
+  .pile .lbl { font-size: 0.75rem; opacity: 0.8; margin-top: 6px; font-weight: 600; }
+  #deck {
+    width: 74px; height: 104px;
+    border-radius: var(--radius);
+    background: var(--back-bg, repeating-linear-gradient(45deg, #8A2B23 0 7px, #A03A30 7px 14px));
+    border: 3px solid #F3E4C8;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.35);
+    cursor: pointer;
+    transition: transform 0.08s ease;
+    position: relative;
+  }
+  #deck:active { transform: scale(0.95); }
+  #deck.pulse::after {
+    content: "";
+    position: absolute;
+    inset: -7px;
+    border-radius: 16px;
+    border: 3px solid var(--gold);
+    opacity: 0;
+    animation: ring 1.1s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes ring { 0%, 100% { opacity: 0; transform: scale(0.96); } 50% { opacity: 0.8; transform: scale(1.02); } }
+  #deck-count {
+    position: absolute; right: -6px; top: -6px;
+    background: var(--gold); color: var(--ink);
+    font-size: 0.75rem; font-weight: 700;
+    border-radius: 999px; padding: 2px 7px;
+  }
+
+  /* ---- Cards ---- */
+  .card {
+    width: 74px; height: 104px;
+    border-radius: var(--radius);
+    background: var(--card-face);
+    color: var(--ink);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.35);
+    position: relative;
+    font-weight: 700;
+  }
+  .card .rank { font-size: 1.7rem; line-height: 1; }
+  .card .suit { font-size: 1.5rem; line-height: 1.3; }
+  .card .word { font-size: 0.62rem; font-weight: 600; opacity: 0.7; }
+  .card .corner { position: absolute; top: 5px; left: 7px; font-size: 0.7rem; line-height: 1.05; text-align: left; }
+  .card.srdce  { color: var(--red); }
+  .card.kule   { color: var(--amber); }
+  .card.listy  { color: var(--green); }
+  .card.zaludy { color: var(--brown); }
+
+  #suit-flag {
+    position: absolute;
+    top: -14px; right: -10px;
+    background: #fff;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    display: none;
+  }
+  #discard-wrap { position: relative; }
+
+  /* ---- Status ---- */
+  #status {
+    text-align: center;
+    min-height: 26px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 2px 12px;
+  }
+  #status .warn { color: var(--gold); }
+
+  /* ---- Player hand ---- */
+  #hand-area { padding: 8px 0 4px; }
+  #hand {
+    position: relative;
+    height: 128px;
+    margin: 0 10px;
+  }
+  #hand .card {
+    position: absolute;
+    top: 14px;
+    cursor: pointer;
+    transition: transform 0.12s ease, opacity 0.2s ease;
+    transform: rotate(var(--r, 0deg)) translateY(var(--dy, 0px));
+  }
+  #hand .card.playable { outline: 3px solid var(--gold); outline-offset: -1px; }
+  #hand .card.playable:active { transform: rotate(var(--r, 0deg)) translateY(calc(var(--dy, 0px) - 12px)); }
+  #hand .card.dead { opacity: 0.45; }
+
+  /* ---- Action bar ---- */
+  #actions { display: flex; justify-content: center; gap: 10px; padding: 4px 14px 8px; min-height: 48px; }
+  #actions button {
+    border: none;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 11px 20px;
+    border-radius: 999px;
+    background: var(--gold);
+    color: var(--ink);
+    cursor: pointer;
+    box-shadow: 0 3px 0 #B8933A;
+    transition: transform 0.07s ease;
+  }
+  #actions button:active { transform: translateY(2px); box-shadow: 0 1px 0 #B8933A; }
+
+  /* ---- Overlays ---- */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(20, 35, 28, 0.78);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+  }
+  .overlay.show { display: flex; }
+  .sheet {
+    background: var(--card-face);
+    color: var(--ink);
+    border-radius: 22px;
+    padding: 24px 26px;
+    text-align: center;
+    max-width: 320px;
+    margin: 0 18px;
+  }
+  .sheet h1 { font-size: 2rem; margin-bottom: 2px; }
+  .sheet h2 { font-size: 1.4rem; margin-bottom: 6px; }
+  .sheet p { font-size: 0.95rem; color: #6B5D4C; margin-bottom: 16px; }
+  .sheet .suits, .sheet .players { display: flex; gap: 10px; justify-content: center; margin-bottom: 4px; }
+  .sheet .suits button, .sheet .players button {
+    border: none;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 2rem;
+    width: 62px; height: 62px;
+    border-radius: 16px;
+    background: #F0E8D8;
+    color: var(--ink);
+    cursor: pointer;
+    transition: transform 0.07s ease;
+  }
+  .sheet .suits button:active, .sheet .players button:active { transform: scale(0.92); }
+  .sheet .players button span { display: block; font-size: 0.6rem; font-weight: 600; color: #6B5D4C; }
+  .sheet .big {
+    border: none;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 1rem;
+    padding: 12px 26px;
+    border-radius: 999px;
+    background: var(--red);
+    color: #fff;
+    cursor: pointer;
+  }
+  .sheet .mini { font-size: 0.78rem; font-weight: 600; color: #6B5D4C; margin: 16px 0 8px; }
+  .swatches { display: flex; gap: 10px; justify-content: center; }
+  .swatch {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 3px solid rgba(0,0,0,0.12);
+    cursor: pointer;
+    transition: transform 0.07s ease;
+  }
+  .swatch:active { transform: scale(0.9); }
+  .swatch.sel { border-color: var(--gold); }
+  .swatch-card {
+    width: 30px; height: 42px;
+    border-radius: 6px;
+    border: 2px solid #F3E4C8;
+    box-shadow: 0 0 0 3px transparent;
+    cursor: pointer;
+    transition: transform 0.07s ease;
+  }
+  .swatch-card:active { transform: scale(0.9); }
+  .swatch-card.sel { box-shadow: 0 0 0 3px var(--gold); }
+  #result-emoji { font-size: 3rem; margin-bottom: 8px; }
+  #result-score { font-size: 1.1rem; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+
+  /* ---- Animations ---- */
+  #discard { position: relative; width: 74px; height: 104px; }
+  #discard .card { position: absolute; left: 0; top: 0; transform: rotate(var(--rot, 0deg)); }
+  #discard .card.land { animation: land 0.22s ease; }
+  @keyframes land {
+    from { transform: scale(1.3) rotate(var(--rot, 0deg)); opacity: 0.6; }
+    to   { transform: scale(1) rotate(var(--rot, 0deg)); }
+  }
+  #hand .card.enter { animation: cardIn 0.28s ease backwards; }
+  @keyframes cardIn {
+    from { transform: rotate(var(--r, 0deg)) translateY(34px); opacity: 0; }
+    to   { transform: rotate(var(--r, 0deg)) translateY(var(--dy, 0px)); opacity: 1; }
+  }
+  .fly {
+    position: fixed;
+    z-index: 40;
+    margin: 0;
+    pointer-events: none;
+    transition: transform 0.34s cubic-bezier(0.5, 0.1, 0.3, 1), opacity 0.34s ease;
+    will-change: transform;
+  }
+  .opp.turn .opp-cards { animation: oppPulse 1.2s ease-in-out infinite; }
+  @keyframes oppPulse { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+  .overlay.show .sheet { animation: sheetIn 0.24s ease; }
+  @keyframes sheetIn { from { transform: scale(0.92); opacity: 0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    #deck.pulse::after { animation: none; opacity: 0; }
+    #discard .card.land, #hand .card.enter, .opp.turn .opp-cards, .overlay.show .sheet { animation: none; }
+    .fly { transition: none; }
+  }
+</style>
+</head>
+<body>
+<button id="lang">EN</button>
+<button id="mute">🔊</button>
+<div id="app">
+  <div id="opps-area">
+    <div id="score"></div>
+  </div>
+
+  <div id="status"><span id="status-text"></span></div>
+
+  <div id="table">
+    <div class="pile">
+      <div id="deck"><span id="deck-count">24</span></div>
+      <div class="lbl" id="lbl-draw"></div>
+    </div>
+    <div class="pile">
+      <div id="discard-wrap">
+        <div id="discard"></div>
+        <div id="suit-flag"></div>
+      </div>
+      <div class="lbl" id="lbl-pile"></div>
+    </div>
+  </div>
+
+  <div id="actions"></div>
+
+  <div id="hand-area">
+    <div id="hand"></div>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="menu-overlay">
+  <div class="sheet">
+    <h1>Prší 🃏</h1>
+    <p id="menu-sub"></p>
+    <div class="players" id="player-buttons"></div>
+    <p class="mini" id="theme-label"></p>
+    <div class="swatches" id="theme-buttons"></div>
+    <p class="mini" id="back-label"></p>
+    <div class="swatches" id="back-buttons"></div>
+  </div>
+</div>
+
+<!-- Suit picker -->
+<div class="overlay" id="suit-overlay">
+  <div class="sheet">
+    <h2 id="suit-title"></h2>
+    <p id="suit-sub"></p>
+    <div class="suits" id="suit-buttons"></div>
+  </div>
+</div>
+
+<!-- Round / match result -->
+<div class="overlay" id="result-overlay">
+  <div class="sheet">
+    <div id="result-emoji">🏆</div>
+    <h2 id="result-title"></h2>
+    <div id="result-score"></div>
+    <p id="result-sub"></p>
+    <button class="big" id="again"></button>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* =========================================================
+   YouTube Playables SDK — guarded; game also runs standalone
+   ========================================================= */
+const YT = typeof window.ytgame !== "undefined" ? window.ytgame : null;
+if (YT) {
+  try { YT.game.firstFrameReady(); } catch (e) {}
+  try { YT.system.onPause(() => saveState()); } catch (e) {}
+  try { YT.system.onResume(() => {}); } catch (e) {}
+}
+
+/* =========================================================
+   i18n
+   ========================================================= */
+let LANG = (navigator.language || "en").toLowerCase().startsWith("cs") ? "cs" : "en";
+
+const T = {
+  cs: {
+    you: "Ty", cards: "karet",
+    botName: (i, solo) => solo ? "Soupeř" : "Soupeř " + i,
+    draw: "Lízat", pile: "Balíček",
+    yourTurn: "Hraješ ty",
+    youDrawN: n => "Lížeš " + n + " 🃏",
+    youStand: "Stojíš ⏸️",
+    youDraw1: "Lížeš kartu",
+    oppStands: name => name + " stojí ⏸️",
+    oppDrawsN: (name, n) => name + " líže " + n + " 🃏",
+    oppDraws1: name => name + " líže kartu",
+    suitTo: s => "Měníš na " + s,
+    warnDraw: n => "líže se " + n + "!",
+    warnStand: "další stojí!",
+    warnSuit: s => "mění na " + s,
+    actDrawN: n => "Lížu " + n + " 🃏",
+    actStand: "Stojím ⏸️",
+    actDraw1: "Lížu kartu 🃏",
+    actDrawInstead: "Radši lížu",
+    suitTitle: "Měníš barvu",
+    suitSub: "Vyber barvu, která bude platit",
+    menuSub: "Kolik hráčů? (hraje se na 3 vítězná kola)",
+    themeWord: "Barva stolu",
+    backWord: "Rub karet",
+    playersWord: "hráči",
+    roundWin: "Kolo je tvoje!",
+    roundLoseBy: name => "Kolo bere " + name.toLowerCase(),
+    matchWin: "Vyhrál jsi zápas!",
+    matchLoseBy: name => name + " vyhrál zápas",
+    nextRound: "Další kolo",
+    newMatch: "Nový zápas",
+    firstTo: n => "hraje se na " + n + " vítězná kola",
+    ranks: { "7": ["7", ""], "8": ["8", ""], "9": ["9", ""], "10": ["10", ""],
+             spodek: ["Sp", "spodek"], svrsek: ["Sv", "svršek"], kral: ["K", "král"], eso: ["A", "eso"] },
+  },
+  en: {
+    you: "You", cards: "cards",
+    botName: (i, solo) => solo ? "Bot" : "Bot " + i,
+    draw: "Draw", pile: "Pile",
+    yourTurn: "Your turn",
+    youDrawN: n => "You draw " + n + " 🃏",
+    youStand: "You skip ⏸️",
+    youDraw1: "You draw a card",
+    oppStands: name => name + " skips ⏸️",
+    oppDrawsN: (name, n) => name + " draws " + n + " 🃏",
+    oppDraws1: name => name + " draws a card",
+    suitTo: s => "Suit changed to " + s,
+    warnDraw: n => "draw " + n + "!",
+    warnStand: "next player skips!",
+    warnSuit: s => "changes to " + s,
+    actDrawN: n => "Draw " + n + " 🃏",
+    actStand: "Skip ⏸️",
+    actDraw1: "Draw a card 🃏",
+    actDrawInstead: "Draw instead",
+    suitTitle: "Choose a suit",
+    suitSub: "The suit you pick becomes active",
+    menuSub: "How many players? (first to 3 rounds wins)",
+    themeWord: "Table color",
+    backWord: "Card backs",
+    playersWord: "players",
+    roundWin: "You take the round!",
+    roundLoseBy: name => name + " takes the round",
+    matchWin: "You won the match!",
+    matchLoseBy: name => name + " won the match",
+    nextRound: "Next round",
+    newMatch: "New match",
+    firstTo: n => "first to " + n + " rounds wins",
+    ranks: { "7": ["7", ""], "8": ["8", ""], "9": ["9", ""], "10": ["10", ""],
+             spodek: ["U", "under"], svrsek: ["O", "over"], kral: ["K", "king"], eso: ["A", "ace"] },
+  },
+};
+const t = () => T[LANG];
+
+/* =========================================================
+   Table themes
+   ========================================================= */
+const THEMES = [
+  { id: "green", a: "#2E6B4F", b: "#24553F" },
+  { id: "wood",  a: "#8A5A33", b: "#6E4526" },
+  { id: "night", a: "#2C3E5B", b: "#202E45" },
+  { id: "wine",  a: "#6E2F3A", b: "#55232C" },
+  { id: "slate", a: "#3A4148", b: "#2B3136" },
+];
+let THEME = "green";
+function applyTheme() {
+  const th = THEMES.find(x => x.id === THEME) || THEMES[0];
+  document.documentElement.style.setProperty("--table", th.a);
+  document.documentElement.style.setProperty("--table-dark", th.b);
+}
+
+const BACKS = [
+  { id: "red",    bg: "repeating-linear-gradient(45deg, #8A2B23 0 6px, #A03A30 6px 12px)" },
+  { id: "blue",   bg: "repeating-linear-gradient(45deg, #24518A 0 6px, #2F65A8 6px 12px)" },
+  { id: "forest", bg: "repeating-linear-gradient(45deg, #256147 0 5px, transparent 5px 10px), repeating-linear-gradient(-45deg, #256147 0 5px, #37795B 5px 10px)" },
+  { id: "dots",   bg: "radial-gradient(circle at 4px 4px, #C9A9E0 2px, transparent 2.6px) 0 0 / 11px 11px repeat, #5A3B75" },
+  { id: "deco",   bg: "repeating-linear-gradient(90deg, #26231D 0 7px, #C9A13B 7px 9px)" },
+];
+let BACK = "red";
+function applyBack() {
+  const bk = BACKS.find(x => x.id === BACK) || BACKS[0];
+  document.documentElement.style.setProperty("--back-bg", bk.bg);
+}
+
+/* =========================================================
+   Deck — 32 cards, Bohemian suits
+   ========================================================= */
+const SUITS = [
+  { id: "srdce",  sym: "❤️" },
+  { id: "kule",   sym: "🔔" },
+  { id: "listy",  sym: "🍃" },
+  { id: "zaludy", sym: "🌰" },
+];
+const RANK_IDS = ["7", "8", "9", "10", "spodek", "svrsek", "kral", "eso"];
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function makeDeck() {
+  const d = [];
+  SUITS.forEach(s => RANK_IDS.forEach(r => d.push({ suit: s.id, rank: r })));
+  return shuffle(d);
+}
+const suitOf = id => SUITS.find(s => s.id === id);
+
+/* =========================================================
+   Match + round state (player 0 = human)
+   ========================================================= */
+const TARGET = 3;
+let PCOUNT = 2;
+let M = { wins: [0, 0] };
+let G = null;
+let roundToken = 0;
+
+function pName(i) {
+  if (i === 0) return t().you;
+  return t().botName(i, PCOUNT === 2);
+}
+
+function newMatch(pcount) {
+  PCOUNT = pcount;
+  M = { wins: new Array(PCOUNT).fill(0) };
+  newRound();
+}
+
+function newRound() {
+  roundToken++;
+  const deck = makeDeck();
+  const hands = [];
+  for (let i = 0; i < PCOUNT; i++) hands.push(deck.splice(0, 4));
+  const first = deck.shift();
+  G = {
+    deck, hands,
+    discard: [first],
+    activeSuit: first.suit,
+    pendingDraw: 0,
+    acePending: false,
+    turn: 0,
+    over: false,
+  };
+  lastTopObj = null;
+  skipLandOnce = false;
+  prevHandKeys = new Set();
+  setStatus(t().yourTurn);
+  render();
+}
+
+const topCard = () => G.discard[G.discard.length - 1];
+
+/* =========================================================
+   Rules
+   ========================================================= */
+function playable(card) {
+  if (G.over) return false;
+  if (G.pendingDraw > 0) return card.rank === "7";
+  if (G.acePending) return card.rank === "eso";
+  if (card.rank === "svrsek") return true;
+  return card.suit === G.activeSuit || card.rank === topCard().rank;
+}
+
+function refillDeck() {
+  if (G.deck.length > 0) return;
+  const tp = G.discard.pop();
+  G.deck = shuffle(G.discard);
+  G.discard = [tp];
+}
+
+function drawCards(hand, n) {
+  for (let i = 0; i < n; i++) {
+    refillDeck();
+    if (G.deck.length === 0) break; // nothing left anywhere — turn just passes
+    hand.push(G.deck.shift());
+  }
+}
+
+function applyCard(card, chosenSuit) {
+  card.rot = Math.random() * 16 - 8;
+  G.discard.push(card);
+  G.activeSuit = card.rank === "svrsek" ? chosenSuit : card.suit;
+  if (card.rank === "7") G.pendingDraw += 2;
+  if (card.rank === "eso") G.acePending = true;
+}
+
+function checkWin(idx) {
+  if (G.hands[idx].length === 0) {
+    G.over = true;
+    endRound(idx);
+    return true;
+  }
+  return false;
+}
+
+function advance() {
+  if (G.over) return;
+  G.turn = (G.turn + 1) % PCOUNT;
+  render();
+  if (G.turn === 0) {
+    if (G.pendingDraw === 0 && !G.acePending) setStatusIfQuiet();
+  } else {
+    const token = roundToken;
+    setTimeout(() => { if (token === roundToken) botAct(G.turn); }, 850);
+  }
+}
+
+let lastAnnounced = false;
+function setStatusIfQuiet() { /* keep last announcement visible */ }
+
+/* =========================================================
+   Human turn
+   ========================================================= */
+function playerPlay(idx) {
+  if (G.turn !== 0 || G.over) return;
+  const card = G.hands[0][idx];
+  if (!playable(card)) return;
+
+  if (card.rank === "svrsek") {
+    pendingSvrsekIdx = idx;
+    openSuitPicker();
+    return;
+  }
+  G.hands[0].splice(idx, 1);
+  applyCard(card);
+  cardSfx(card);
+  announce(card, pName(0));
+  if (checkWin(0)) return;
+  advance();
+}
+
+let pendingSvrsekIdx = null;
+function confirmSuit(suitId) {
+  closeSuitPicker();
+  const card = G.hands[0].splice(pendingSvrsekIdx, 1)[0];
+  pendingSvrsekIdx = null;
+  applyCard(card, suitId);
+  cardSfx(card);
+  setStatus(t().suitTo(suitOf(suitId).sym));
+  if (checkWin(0)) return;
+  advance();
+}
+
+function playerDrawOrStand() {
+  if (G.turn !== 0 || G.over) return;
+  if (G.acePending) {
+    G.acePending = false;
+    setStatus(t().youStand);
+    advance();
+    return;
+  }
+  if (G.pendingDraw > 0) {
+    const n = G.pendingDraw;
+    drawCards(G.hands[0], n);
+    flyBacks($("hand").getBoundingClientRect(), n);
+    SFX.draw(n);
+    setStatus(t().youDrawN(n));
+    G.pendingDraw = 0;
+    advance();
+    return;
+  }
+  drawCards(G.hands[0], 1);
+  flyBacks($("hand").getBoundingClientRect(), 1);
+  SFX.draw(1);
+  setStatus(t().youDraw1);
+  advance();
+}
+
+/* =========================================================
+   Bots
+   ========================================================= */
+function botAct(i) {
+  if (G.over || G.turn !== i) return;
+  const name = pName(i);
+  const hand = G.hands[i];
+  const cellEl = document.querySelectorAll("#table .opp")[i - 1];
+  const cellRect = cellEl ? cellEl.getBoundingClientRect() : null;
+
+  const options = hand
+    .map((c, idx) => ({ c, idx }))
+    .filter(o => playable(o.c));
+
+  if (options.length === 0) {
+    if (G.acePending) {
+      G.acePending = false;
+      setStatus(t().oppStands(name));
+    } else if (G.pendingDraw > 0) {
+      const n = G.pendingDraw;
+      drawCards(hand, n);
+      flyBacks(cellRect, n);
+      SFX.draw(n);
+      setStatus(t().oppDrawsN(name, n));
+      G.pendingDraw = 0;
+    } else {
+      drawCards(hand, 1);
+      flyBacks(cellRect, 1);
+      SFX.draw(1);
+      setStatus(t().oppDraws1(name));
+    }
+    advance();
+    return;
+  }
+
+  let pick =
+    options.find(o => o.c.rank === "7" && G.pendingDraw > 0) ||
+    options.find(o => o.c.rank === "eso" && G.acePending) ||
+    options.find(o => o.c.rank !== "svrsek") ||
+    options[0];
+
+  const card = hand.splice(pick.idx, 1)[0];
+
+  let chosen = null;
+  if (card.rank === "svrsek") {
+    const counts = {};
+    SUITS.forEach(s => counts[s.id] = 0);
+    hand.forEach(c => counts[c.suit]++);
+    chosen = SUITS.reduce((a, b) => counts[a.id] >= counts[b.id] ? a : b).id;
+  }
+  applyCard(card, chosen);
+  cardSfx(card);
+  flyCardFace(card, cellRect);
+  skipLandOnce = true;
+  announce(card, name, chosen);
+  if (checkWin(i)) return;
+  advance();
+}
+
+/* =========================================================
+   Round end / match scoring
+   ========================================================= */
+function endRound(winnerIdx) {
+  M.wins[winnerIdx]++;
+  saveState();
+  if (YT) { try { YT.game.sendScore({ value: M.wins[0] }); } catch (e) {} }
+
+  const matchOver = M.wins[winnerIdx] >= TARGET;
+  const youWon = winnerIdx === 0;
+  if (youWon) { if (matchOver) SFX.matchWin(); else SFX.roundWin(); } else SFX.roundLose();
+  $("result-emoji").textContent = matchOver ? (youWon ? "🏆" : "😅") : (youWon ? "🎉" : "😮");
+  $("result-title").textContent = matchOver
+    ? (youWon ? t().matchWin : t().matchLoseBy(pName(winnerIdx)))
+    : (youWon ? t().roundWin : t().roundLoseBy(pName(winnerIdx)));
+  $("result-score").textContent = M.wins.map((w, i) => pName(i) + " " + w).join(" · ");
+  $("result-sub").textContent = matchOver ? "" : t().firstTo(TARGET);
+  $("again").textContent = matchOver ? t().newMatch : t().nextRound;
+  $("again").dataset.mode = matchOver ? "match" : "round";
+  $("result-overlay").classList.add("show");
+}
+
+/* =========================================================
+   Persistence — Playables cloud save, window.storage fallback
+   ========================================================= */
+const SAVE_KEY = "prsi-save";
+function stateJson() { return JSON.stringify({ v: 2, lang: LANG, pcount: PCOUNT, sound: soundOn, theme: THEME, back: BACK }); }
+
+async function saveState() {
+  const json = stateJson();
+  if (YT) { try { await YT.game.saveData(json); return; } catch (e) {} }
+  if (typeof window.storage !== "undefined") {
+    try { await window.storage.set(SAVE_KEY, json); } catch (e) {}
+  }
+}
+
+async function loadState() {
+  let json = null;
+  if (YT) { try { json = await YT.game.loadData(); } catch (e) {} }
+  if (!json && typeof window.storage !== "undefined") {
+    try { const r = await window.storage.get(SAVE_KEY); if (r && r.value) json = r.value; } catch (e) {}
+  }
+  if (!json) return;
+  try {
+    const d = JSON.parse(json);
+    if (d && (d.lang === "cs" || d.lang === "en")) LANG = d.lang;
+    if (d && d.pcount >= 2 && d.pcount <= 4) PCOUNT = d.pcount;
+    if (d && typeof d.sound === "boolean") soundOn = d.sound;
+    if (d && THEMES.some(x => x.id === d.theme)) THEME = d.theme;
+    if (d && BACKS.some(x => x.id === d.back)) BACK = d.back;
+  } catch (e) {}
+}
+
+/* =========================================================
+   UI
+   ========================================================= */
+const $ = id => document.getElementById(id);
+
+/* ---- animation helpers ---- */
+const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let lastTopObj = null, skipLandOnce = false;
+let prevHandKeys = new Set();
+const cardKey = c => c.suit + "-" + c.rank;
+
+function flyEl(el, src, dest, delay) {
+  el.classList.add("fly");
+  el.style.left = src.left + "px";
+  el.style.top = src.top + "px";
+  el.style.transitionDelay = (delay || 0) + "ms";
+  el.style.transform = "translate(0px, 0px)";
+  document.body.appendChild(el);
+  el.getBoundingClientRect(); // commit start position before transitioning
+  const dx = dest.left + dest.width / 2 - (src.left + src.width / 2);
+  const dy = dest.top + dest.height / 2 - (src.top + src.height / 2);
+  el.style.transform = "translate(" + dx + "px," + dy + "px) scale(0.9)";
+  el.style.opacity = "0.9";
+  setTimeout(() => el.remove(), 440 + (delay || 0));
+}
+
+function flyCardFace(card, srcRect) {
+  if (reducedMotion || !srcRect) return;
+  requestAnimationFrame(() => {
+    flyEl(cardEl(card), srcRect, $("discard").getBoundingClientRect(), 0);
+  });
+}
+
+function flyBacks(destRect, count) {
+  if (reducedMotion || !destRect) return;
+  requestAnimationFrame(() => {
+    const src = $("deck").getBoundingClientRect();
+    for (let i = 0; i < Math.min(count, 4); i++) {
+      const b = document.createElement("div");
+      b.className = "back";
+      b.style.width = "46px"; b.style.height = "64px"; b.style.margin = "0";
+      flyEl(b, src, destRect, i * 90);
+    }
+  });
+}
+
+/* ---- sound engine (Web Audio, no files) ---- */
+let soundOn = true;   // user toggle, persisted
+let ytAudioOk = true; // YouTube app audio setting
+let actx = null, master = null, noiseBuf = null;
+
+if (YT) {
+  try {
+    const v = YT.system.isAudioEnabled;
+    ytAudioOk = typeof v === "function" ? !!YT.system.isAudioEnabled() : !!v;
+  } catch (e) {}
+  try { YT.system.onAudioEnabledChange(en => { ytAudioOk = !!en; }); } catch (e) {}
+}
+
+function audioAllowed() { return soundOn && ytAudioOk; }
+
+function ensureCtx() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  if (!actx) {
+    actx = new AC();
+    master = actx.createGain();
+    master.gain.value = 0.5;
+    master.connect(actx.destination);
+  }
+  if (actx.state === "suspended") actx.resume();
+  return actx;
+}
+document.addEventListener("pointerdown", () => ensureCtx(), { once: true, capture: true });
+
+function tone(freq, dur, type, delay, vol, slideTo) {
+  if (!audioAllowed()) return;
+  const c = ensureCtx(); if (!c) return;
+  const t0 = c.currentTime + (delay || 0);
+  const o = c.createOscillator();
+  const g = c.createGain();
+  o.type = type || "triangle";
+  o.frequency.setValueAtTime(freq, t0);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+  g.gain.setValueAtTime(vol || 0.25, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  o.connect(g); g.connect(master);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+
+function noiseHit(dur, delay, vol, freq) {
+  if (!audioAllowed()) return;
+  const c = ensureCtx(); if (!c) return;
+  if (!noiseBuf) {
+    noiseBuf = c.createBuffer(1, Math.floor(c.sampleRate * 0.15), c.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const t0 = c.currentTime + (delay || 0);
+  const src = c.createBufferSource();
+  src.buffer = noiseBuf;
+  const f = c.createBiquadFilter();
+  f.type = "bandpass";
+  f.frequency.value = freq || 1800;
+  f.Q.value = 0.8;
+  const g = c.createGain();
+  g.gain.setValueAtTime(vol || 0.3, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t0); src.stop(t0 + dur + 0.05);
+}
+
+const SFX = {
+  play() { noiseHit(0.06, 0, 0.35, 2200); },
+  draw(n) { for (let i = 0; i < Math.min(n, 4); i++) noiseHit(0.09, i * 0.09, 0.22, 900); },
+  seven() { tone(392, 0.09, "square", 0.06, 0.15); tone(311, 0.14, "square", 0.17, 0.15); },
+  ace() { tone(440, 0.2, "sawtooth", 0.06, 0.12, 200); },
+  suit() { tone(880, 0.12, "sine", 0.06, 0.2); tone(1318, 0.18, "sine", 0.13, 0.15); },
+  tap() { noiseHit(0.03, 0, 0.15, 3000); },
+  roundWin() { [523, 659, 784].forEach((f, i) => tone(f, 0.16, "triangle", 0.15 + i * 0.09, 0.22)); },
+  roundLose() { [392, 330, 262].forEach((f, i) => tone(f, 0.18, "triangle", 0.15 + i * 0.1, 0.16)); },
+  matchWin() { [523, 659, 784, 1046, 784, 1046].forEach((f, i) => tone(f, 0.18, "triangle", 0.15 + i * 0.11, 0.22)); },
+};
+
+function cardSfx(card) {
+  SFX.play();
+  if (card.rank === "7") SFX.seven();
+  else if (card.rank === "eso") SFX.ace();
+  else if (card.rank === "svrsek") SFX.suit();
+}
+
+function rankLabel(rankId) { return t().ranks[rankId]; }
+
+function announce(card, who, chosenSuit) {
+  const pair = rankLabel(card.rank);
+  const s = suitOf(card.suit);
+  let msg = who + ": " + (pair[1] || pair[0]) + " " + s.sym;
+  if (card.rank === "7") msg += ' — <span class="warn">' + t().warnDraw(G.pendingDraw) + "</span>";
+  if (card.rank === "eso") msg += ' — <span class="warn">' + t().warnStand + "</span>";
+  if (card.rank === "svrsek" && chosenSuit) msg += ' — <span class="warn">' + t().warnSuit(suitOf(chosenSuit).sym) + "</span>";
+  $("status-text").innerHTML = msg;
+}
+function setStatus(msg) { $("status-text").innerHTML = msg; }
+
+function cardEl(card, extraClass) {
+  const pair = rankLabel(card.rank);
+  const s = suitOf(card.suit);
+  const el = document.createElement("div");
+  el.className = "card " + card.suit + (extraClass ? " " + extraClass : "");
+  el.innerHTML =
+    '<div class="corner">' + pair[0] + "<br>" + s.sym + "</div>" +
+    '<div class="rank">' + pair[0] + '</div>' +
+    '<div class="suit">' + s.sym + '</div>' +
+    (pair[1] ? '<div class="word">' + pair[1] + "</div>" : "");
+  return el;
+}
+
+function renderStatic() {
+  $("lang").textContent = LANG === "cs" ? "EN" : "CS";
+  $("mute").textContent = soundOn ? "🔊" : "🔇";
+  $("lbl-draw").textContent = t().draw;
+  $("lbl-pile").textContent = t().pile;
+  $("suit-title").textContent = t().suitTitle;
+  $("suit-sub").textContent = t().suitSub;
+  $("menu-sub").textContent = t().menuSub;
+  const wrap = $("player-buttons");
+  wrap.innerHTML = "";
+  [2, 3, 4].forEach(n => {
+    const b = document.createElement("button");
+    b.innerHTML = n + "<span>" + t().playersWord + "</span>";
+    b.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      SFX.tap();
+      $("menu-overlay").classList.remove("show");
+      newMatch(n);
+      saveState();
+    });
+    wrap.appendChild(b);
+  });
+  $("theme-label").textContent = t().themeWord;
+  const tw = $("theme-buttons");
+  tw.innerHTML = "";
+  THEMES.forEach(th => {
+    const s = document.createElement("div");
+    s.className = "swatch" + (th.id === THEME ? " sel" : "");
+    s.style.background = "radial-gradient(circle at 35% 30%, " + th.a + ", " + th.b + ")";
+    s.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      SFX.tap();
+      THEME = th.id;
+      applyTheme();
+      tw.querySelectorAll(".swatch").forEach(x => x.classList.remove("sel"));
+      s.classList.add("sel");
+      saveState();
+    });
+    tw.appendChild(s);
+  });
+  $("back-label").textContent = t().backWord;
+  const bw = $("back-buttons");
+  bw.innerHTML = "";
+  BACKS.forEach(bk => {
+    const s = document.createElement("div");
+    s.className = "swatch-card" + (bk.id === BACK ? " sel" : "");
+    s.style.background = bk.bg;
+    s.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      SFX.tap();
+      BACK = bk.id;
+      applyBack();
+      bw.querySelectorAll(".swatch-card").forEach(x => x.classList.remove("sel"));
+      s.classList.add("sel");
+      saveState();
+    });
+    bw.appendChild(s);
+  });
+}
+
+function render() {
+  $("score").textContent = "⭐ " + M.wins.map((w, i) => pName(i) + " " + w).join(" · ");
+
+  // opponents around the table
+  document.querySelectorAll("#table .opp").forEach(el => el.remove());
+  const seats =
+    PCOUNT === 2 ? ["seat-top"] :
+    PCOUNT === 3 ? ["seat-topleft", "seat-topright"] :
+    ["seat-left", "seat-top", "seat-right"];
+  const tableEl = $("table");
+  for (let i = 1; i < PCOUNT; i++) {
+    const seat = seats[i - 1];
+    const vert = seat === "seat-left" || seat === "seat-right";
+    const cell = document.createElement("div");
+    cell.className = "opp " + seat + (vert ? " vert" : "") + (G.turn === i && !G.over ? " turn" : "");
+    const label = document.createElement("div");
+    label.className = "opp-label";
+    label.textContent = pName(i) + " · " + G.hands[i].length;
+    const cards = document.createElement("div");
+    cards.className = "opp-cards";
+    const n = Math.min(G.hands[i].length, vert ? 6 : 7);
+    for (let k = 0; k < n; k++) {
+      const b = document.createElement("div");
+      b.className = "back";
+      cards.appendChild(b);
+    }
+    cell.appendChild(label);
+    cell.appendChild(cards);
+    tableEl.appendChild(cell);
+  }
+
+  // discard + active suit flag
+  const d = $("discard");
+  d.innerHTML = "";
+  const pile = G.discard.slice(-3);
+  const newTop = topCard() !== lastTopObj;
+  pile.forEach((c, k) => {
+    const el = cardEl(c);
+    el.style.setProperty("--rot", (c.rot || 0) + "deg");
+    if (k === pile.length - 1 && newTop && !skipLandOnce && !reducedMotion) el.classList.add("land");
+    d.appendChild(el);
+  });
+  if (newTop) { lastTopObj = topCard(); skipLandOnce = false; }
+  const flag = $("suit-flag");
+  if (G.activeSuit !== topCard().suit) {
+    flag.textContent = suitOf(G.activeSuit).sym;
+    flag.style.display = "block";
+  } else {
+    flag.style.display = "none";
+  }
+
+  $("deck-count").textContent = G.deck.length;
+
+  // hand — fanned so any count fits without scrolling
+  const h = $("hand");
+  h.innerHTML = "";
+  const nCards = G.hands[0].length;
+  const hw = h.clientWidth || 340;
+  const cw = 74;
+  const step = nCards > 1 ? Math.min(82, (hw - cw) / (nCards - 1)) : 0;
+  const x0 = Math.max(0, (hw - (cw + step * (nCards - 1))) / 2);
+  const mid = (nCards - 1) / 2;
+  const fan = nCards > 4 ? Math.min(2.2, 16 / nCards) : 0;
+  let anyPlayable = false;
+  const newKeys = new Set();
+  G.hands[0].forEach((card, idx) => {
+    const can = G.turn === 0 && playable(card);
+    if (can) anyPlayable = true;
+    const el = cardEl(card, can ? "playable" : "dead");
+    el.style.left = (x0 + idx * step) + "px";
+    el.style.zIndex = idx + 1;
+    el.style.setProperty("--r", ((idx - mid) * fan) + "deg");
+    el.style.setProperty("--dy", (Math.abs(idx - mid) * fan * 0.9) + "px");
+    const key = cardKey(card);
+    newKeys.add(key);
+    if (!prevHandKeys.has(key) && !reducedMotion) {
+      el.classList.add("enter");
+      el.style.animationDelay = (idx * 40) + "ms";
+    }
+    if (can) el.addEventListener("pointerdown", e => { e.preventDefault(); playerPlay(idx); });
+    h.appendChild(el);
+  });
+  prevHandKeys = newKeys;
+
+  // actions
+  const a = $("actions");
+  a.innerHTML = "";
+  $("deck").classList.remove("pulse");
+  if (G.turn === 0 && !G.over) {
+    if (G.acePending && !anyPlayable) {
+      addAction(t().actStand, playerDrawOrStand);
+    } else if (G.pendingDraw > 0 && !anyPlayable) {
+      addAction(t().actDrawN(G.pendingDraw), playerDrawOrStand);
+      $("deck").classList.add("pulse");
+    } else if (!anyPlayable) {
+      addAction(t().actDraw1, playerDrawOrStand);
+      $("deck").classList.add("pulse");
+    } else if (!G.acePending && G.pendingDraw === 0) {
+      addAction(t().actDrawInstead, playerDrawOrStand);
+    } else if (G.pendingDraw > 0) {
+      addAction(t().actDrawN(G.pendingDraw), playerDrawOrStand);
+    } else if (G.acePending) {
+      addAction(t().actStand, playerDrawOrStand);
+    }
+  }
+}
+
+function addAction(label, fn) {
+  const b = document.createElement("button");
+  b.textContent = label;
+  b.addEventListener("pointerdown", e => { e.preventDefault(); SFX.tap(); fn(); });
+  $("actions").appendChild(b);
+}
+
+/* deck tap = draw */
+$("deck").addEventListener("pointerdown", e => {
+  e.preventDefault();
+  if (G && G.turn === 0 && !G.acePending) playerDrawOrStand();
+});
+
+/* language toggle */
+$("lang").addEventListener("pointerdown", e => {
+  e.preventDefault();
+  LANG = LANG === "cs" ? "en" : "cs";
+  saveState();
+  renderStatic();
+  if (G) {
+    render();
+    if (G.turn === 0 && !G.over) setStatus(t().yourTurn);
+  }
+});
+
+/* sound toggle */
+$("mute").addEventListener("pointerdown", e => {
+  e.preventDefault();
+  soundOn = !soundOn;
+  $("mute").textContent = soundOn ? "🔊" : "🔇";
+  if (soundOn) SFX.tap();
+  saveState();
+});
+
+/* re-layout the fan when the screen size changes */
+window.addEventListener("resize", () => { if (G) render(); });
+
+/* suit picker */
+function openSuitPicker() {
+  const wrap = $("suit-buttons");
+  wrap.innerHTML = "";
+  SUITS.forEach(s => {
+    const b = document.createElement("button");
+    b.textContent = s.sym;
+    b.addEventListener("pointerdown", e => { e.preventDefault(); confirmSuit(s.id); });
+    wrap.appendChild(b);
+  });
+  $("suit-overlay").classList.add("show");
+}
+function closeSuitPicker() { $("suit-overlay").classList.remove("show"); }
+
+/* round / match continue */
+$("again").addEventListener("pointerdown", e => {
+  e.preventDefault();
+  SFX.tap();
+  $("result-overlay").classList.remove("show");
+  if ($("again").dataset.mode === "match") {
+    $("menu-overlay").classList.add("show");
+  } else {
+    newRound();
+  }
+});
+
+/* =========================================================
+   Boot — menu first; menu is the gameReady moment
+   ========================================================= */
+loadState().then(() => {
+  applyTheme();
+  applyBack();
+  renderStatic();
+  $("menu-overlay").classList.add("show");
+  if (YT) { try { YT.game.gameReady(); } catch (e) {} }
+});
+})();
+</script>
+</body>
+</html>
