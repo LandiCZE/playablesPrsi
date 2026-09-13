@@ -18,6 +18,7 @@
     --amber: #C98A1B;
     --brown: #7A5230;
     --gold: #F2C94C;
+    --gold-text: #FFE39A; /* lighter gold for text on the table — keeps 4.5:1 contrast on every theme */
     --radius: 12px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -50,14 +51,17 @@
   #lang { right: auto; left: 12px; }
   #help { right: auto; left: 60px; min-width: 30px; padding: 6px 0; }
 
+  :focus-visible { outline: 3px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 6px #1D4ED8; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
   /* ---- Opponents ---- */
   #opps-area { padding: 4px 0 0; }
-  #score { text-align: center; font-size: 0.78rem; color: var(--gold); font-weight: 700; margin-bottom: 4px; min-height: 16px; }
+  #score { text-align: center; font-size: 0.78rem; color: var(--gold-text); font-weight: 700; margin-bottom: 4px; min-height: 16px; }
   /* narrow screens: drop the score below the corner buttons instead of squeezing between them */
   @media (max-width: 700px) { #score { margin-top: 30px; } }
   .opp { position: absolute; text-align: center; z-index: 5; }
   .opp .opp-label { font-size: 0.78rem; opacity: 0.85; font-weight: 600; margin-bottom: 4px; }
-  .opp.turn .opp-label { color: var(--gold); opacity: 1; }
+  .opp.turn .opp-label { color: var(--gold-text); opacity: 1; }
   .opp .opp-cards { display: flex; justify-content: center; height: 46px; }
   .opp.vert .opp-cards { flex-direction: column; align-items: center; height: auto; min-height: 46px; }
   .opp.vert .back { margin: -30px 0 0; }
@@ -159,7 +163,7 @@
     font-size: 0.95rem;
     padding: 2px 12px;
   }
-  #status .warn { color: var(--gold); }
+  #status .warn { color: var(--gold-text); }
 
   /* ---- Player hand ---- */
   #hand-area { padding: 8px 0 4px; }
@@ -178,6 +182,7 @@
   #hand .card.playable { outline: 3px solid var(--gold); outline-offset: -1px; }
   #hand .card.playable:active { transform: rotate(var(--r, 0deg)) translateY(calc(var(--dy, 0px) - 12px)); }
   #hand .card.dead { opacity: 0.45; }
+  #hand .card:focus-visible { transform: rotate(var(--r, 0deg)) translateY(calc(var(--dy, 0px) - 12px)); z-index: 100 !important; }
 
   /* ---- Action bar ---- */
   #actions { display: flex; justify-content: center; gap: 10px; padding: 4px 14px 8px; min-height: 48px; }
@@ -248,6 +253,7 @@
   .swatches { display: flex; gap: 10px; justify-content: center; }
   .swatch {
     width: 34px; height: 34px;
+    padding: 0;
     border-radius: 50%;
     border: 3px solid rgba(0,0,0,0.12);
     cursor: pointer;
@@ -257,6 +263,7 @@
   .swatch.sel { border-color: var(--gold); }
   .swatch-card {
     width: 30px; height: 42px;
+    padding: 0;
     border-radius: 6px;
     border: 2px solid #F3E4C8;
     box-shadow: 0 0 0 3px transparent;
@@ -277,6 +284,8 @@
     cursor: pointer;
   }
   #rules-overlay { z-index: 25; }
+  #continue-wrap { margin: 4px 0 14px; }
+  #continue-wrap .mini { margin: 0 0 8px; }
   .sheet.rules { max-height: calc(100dvh - 32px); overflow-y: auto; }
   #rules-list { list-style: none; text-align: left; margin-bottom: 18px; }
   #rules-list li { display: flex; gap: 12px; align-items: flex-start; font-size: 0.9rem; line-height: 1.35; color: #4A3E31; margin-bottom: 10px; }
@@ -336,15 +345,15 @@
     <div id="score"></div>
   </div>
 
-  <div id="status"><span id="status-text"></span></div>
+  <div id="status" role="status" aria-live="polite"><span id="status-text"></span></div>
 
   <div id="table">
     <div class="pile">
-      <div id="deck"><span id="deck-count">24</span></div>
+      <div id="deck" role="button" tabindex="0"><span id="deck-count" aria-hidden="true">24</span></div>
       <div class="lbl" id="lbl-draw"></div>
     </div>
     <div class="pile">
-      <div id="discard-wrap">
+      <div id="discard-wrap" role="img">
         <div id="discard"></div>
         <div id="suit-flag"></div>
       </div>
@@ -360,9 +369,10 @@
 </div>
 
 <!-- Start menu -->
-<div class="overlay" id="menu-overlay">
+<div class="overlay" id="menu-overlay" role="dialog" aria-modal="true" aria-labelledby="menu-title">
   <div class="sheet">
-    <h1>Prší 🃏</h1>
+    <h1 id="menu-title">Prší <span aria-hidden="true">🃏</span></h1>
+    <div id="continue-wrap"></div>
     <p id="menu-sub"></p>
     <div class="players" id="player-buttons"></div>
     <p class="mini" id="theme-label"></p>
@@ -374,7 +384,7 @@
 </div>
 
 <!-- Rules -->
-<div class="overlay" id="rules-overlay">
+<div class="overlay" id="rules-overlay" role="dialog" aria-modal="true" aria-labelledby="rules-title">
   <div class="sheet rules">
     <h2 id="rules-title"></h2>
     <ul id="rules-list"></ul>
@@ -383,7 +393,7 @@
 </div>
 
 <!-- Suit picker -->
-<div class="overlay" id="suit-overlay">
+<div class="overlay" id="suit-overlay" role="dialog" aria-modal="true" aria-labelledby="suit-title">
   <div class="sheet">
     <h2 id="suit-title"></h2>
     <p id="suit-sub"></p>
@@ -392,7 +402,7 @@
 </div>
 
 <!-- Round / match result -->
-<div class="overlay" id="result-overlay">
+<div class="overlay" id="result-overlay" role="dialog" aria-modal="true" aria-labelledby="result-title">
   <div class="sheet">
     <div id="result-emoji">🏆</div>
     <h2 id="result-title"></h2>
@@ -462,6 +472,16 @@ const T = {
     rulesLink: "Jak se hraje?",
     rulesTitle: "Pravidla",
     rulesOk: "Rozumím",
+    continueMatch: "Pokračovat v zápase",
+    langSwitch: "Přepnout do angličtiny",
+    muteLabel: "Vypnout zvuk",
+    unmuteLabel: "Zapnout zvuk",
+    activeSuit: s => "platí " + s,
+    suitNames: { srdce: "srdce", kule: "kule", listy: "listy", zaludy: "žaludy" },
+    cardName: (r, s) => ({ srdce: "srdcov", kule: "kulov", listy: "listov", zaludy: "žaludsk" })[s] +
+      ({ "7": "á sedma", "8": "á osma", "9": "á devítka", "10": "á desítka", spodek: "ý spodek", svrsek: "ý svršek", kral: "ý král", eso: "é eso" })[r],
+    themeNames: { green: "zelená", wood: "dřevo", night: "noc", wine: "vínová", slate: "břidlice" },
+    backNames: { red: "červený", blue: "modrý", forest: "les", dots: "puntíky", deco: "art deco" },
     rules: [
       ["🃏", "Každý dostane 4 karty. Zahraj kartu stejné <b>barvy</b> nebo stejné <b>hodnoty</b> jako vrchní karta."],
       ["➕", "Nemáš co zahrát? Klepni na <b>Lízat</b> a vezmi si kartu. Lízat můžeš i místo hraní."],
@@ -508,6 +528,16 @@ const T = {
     rulesLink: "How to play",
     rulesTitle: "How to play",
     rulesOk: "Got it",
+    continueMatch: "Continue match",
+    langSwitch: "Switch to Czech",
+    muteLabel: "Turn sound off",
+    unmuteLabel: "Turn sound on",
+    activeSuit: s => "active suit " + s,
+    suitNames: { srdce: "hearts", kule: "bells", listy: "leaves", zaludy: "acorns" },
+    cardName: (r, s) => ({ "7": "seven", "8": "eight", "9": "nine", "10": "ten", spodek: "under", svrsek: "over", kral: "king", eso: "ace" })[r] +
+      " of " + ({ srdce: "hearts", kule: "bells", listy: "leaves", zaludy: "acorns" })[s],
+    themeNames: { green: "green", wood: "wood", night: "night", wine: "wine", slate: "slate" },
+    backNames: { red: "red", blue: "blue", forest: "forest", dots: "dots", deco: "art deco" },
     rules: [
       ["🃏", "Everyone gets 4 cards. Play a card matching the <b>suit</b> or the <b>rank</b> of the top card."],
       ["➕", "Can't play? Tap <b>Draw</b> to take a card. You can also draw instead of playing."],
@@ -586,6 +616,7 @@ let M = { wins: [0, 0] };
 let G = null;
 let roundToken = 0;
 let roundsWon = 0; // lifetime rounds won — the score sent to YouTube
+let savedMatch = null; // unfinished match from the save, offered as "Continue" in the menu
 
 function pName(i) {
   if (i === 0) return t().you;
@@ -595,6 +626,7 @@ function pName(i) {
 function newMatch(pcount) {
   PCOUNT = pcount;
   M = { wins: new Array(PCOUNT).fill(0) };
+  savedMatch = null;
   newRound();
 }
 
@@ -618,6 +650,22 @@ function newRound() {
   prevHandKeys = new Set();
   setStatus(t().yourTurn);
   render();
+  saveState();
+}
+
+function resumeMatch(s) {
+  PCOUNT = s.pcount;
+  M = { wins: s.wins.slice() };
+  savedMatch = null;
+  if (!s.round) { newRound(); return; }
+  roundToken++;
+  G = Object.assign({ over: false }, s.round);
+  lastTopObj = topCard();
+  skipLandOnce = false;
+  prevHandKeys = new Set();
+  setStatus(G.turn === 0 ? t().yourTurn : "");
+  render();
+  scheduleBot();
 }
 
 const topCard = () => G.discard[G.discard.length - 1];
@@ -671,6 +719,7 @@ function advance() {
   render();
   if (G.turn === 0) {
     if (G.pendingDraw === 0 && !G.acePending) setStatusIfQuiet();
+    saveState(); // checkpoint the match at the start of every human turn
   } else {
     scheduleBot();
   }
@@ -738,7 +787,7 @@ function confirmSuit(suitId) {
   pendingSvrsekIdx = null;
   applyCard(card, suitId);
   cardSfx(card);
-  setStatus(t().suitTo(suitOf(suitId).sym));
+  setStatus(t().suitTo(symHtml(suitId)));
   if (checkWin(0)) return;
   advance();
 }
@@ -849,7 +898,7 @@ function endRound(winnerIdx) {
   $("result-sub").textContent = matchOver ? "" : t().firstTo(TARGET);
   $("again").textContent = matchOver ? t().newMatch : t().nextRound;
   $("again").dataset.mode = matchOver ? "match" : "round";
-  $("result-overlay").classList.add("show");
+  showOverlay("result-overlay");
 }
 
 /* =========================================================
@@ -857,7 +906,47 @@ function endRound(winnerIdx) {
    ========================================================= */
 const SAVE_KEY = "prsi-save";
 let loaded = false; // Playables: loadData must complete before any saveData
-function stateJson() { return JSON.stringify({ v: 3, lang: LANG, pcount: PCOUNT, sound: soundOn, theme: THEME, back: BACK, roundsWon }); }
+function stateJson() { return JSON.stringify({ v: 4, lang: LANG, pcount: PCOUNT, sound: soundOn, theme: THEME, back: BACK, roundsWon, match: matchState() }); }
+
+// unfinished match to persist; null once the match is decided
+function matchState() {
+  if (!G) return savedMatch; // still in the boot menu — keep the stored match untouched
+  if (M.wins.some(w => w >= TARGET)) return null;
+  const round = G.over ? null : {
+    deck: G.deck, hands: G.hands, discard: G.discard,
+    activeSuit: G.activeSuit, pendingDraw: G.pendingDraw, acePending: G.acePending, turn: G.turn,
+  };
+  return { pcount: PCOUNT, wins: M.wins, round };
+}
+
+// saves come from older versions or could be damaged — accept only a fully consistent match
+function validMatch(m) {
+  try {
+    if (!m || !Number.isInteger(m.pcount) || m.pcount < 2 || m.pcount > 4) return null;
+    if (!Array.isArray(m.wins) || m.wins.length !== m.pcount ||
+        !m.wins.every(w => Number.isInteger(w) && w >= 0 && w < TARGET)) return null;
+    if (m.round == null) return { pcount: m.pcount, wins: m.wins.slice(), round: null };
+    const r = m.round;
+    const isCard = c => c && SUITS.some(s => s.id === c.suit) && RANK_IDS.includes(c.rank);
+    const clean = a => Array.isArray(a) && a.every(isCard)
+      ? a.map(c => ({ suit: c.suit, rank: c.rank, rot: typeof c.rot === "number" ? c.rot : 0 }))
+      : null;
+    const deck = clean(r.deck), discard = clean(r.discard);
+    const hands = Array.isArray(r.hands) && r.hands.length === m.pcount ? r.hands.map(clean) : null;
+    if (!deck || !discard || !discard.length || !hands || hands.some(h => !h || !h.length)) return null;
+    const keys = deck.concat(discard, ...hands).map(c => c.suit + "-" + c.rank);
+    if (keys.length !== 32 || new Set(keys).size !== 32) return null;
+    if (!SUITS.some(s => s.id === r.activeSuit)) return null;
+    if (!Number.isInteger(r.pendingDraw) || r.pendingDraw < 0 || typeof r.acePending !== "boolean") return null;
+    if (!Number.isInteger(r.turn) || r.turn < 0 || r.turn >= m.pcount) return null;
+    return {
+      pcount: m.pcount, wins: m.wins.slice(),
+      round: { deck, hands, discard, activeSuit: r.activeSuit, pendingDraw: r.pendingDraw, acePending: r.acePending, turn: r.turn },
+    };
+  } catch (e) {
+    return null;
+  }
+}
 
 async function saveState() {
   if (!loaded) return;
@@ -885,6 +974,7 @@ async function loadState() {
     if (d && THEMES.some(x => x.id === d.theme)) THEME = d.theme;
     if (d && BACKS.some(x => x.id === d.back)) BACK = d.back;
     if (d && Number.isSafeInteger(d.roundsWon) && d.roundsWon >= 0) roundsWon = d.roundsWon;
+    if (d) savedMatch = validMatch(d.match);
   } catch (e) {}
 }
 
@@ -892,6 +982,62 @@ async function loadState() {
    UI
    ========================================================= */
 const $ = id => document.getElementById(id);
+
+/* ---- input + accessibility helpers ---- */
+// pointer taps act on pointerdown for responsiveness; Enter/Space give keyboard users the same action
+function onTap(el, fn) {
+  el.addEventListener("pointerdown", e => {
+    if (e.button > 0) return;
+    e.preventDefault();
+    fn();
+  });
+  el.addEventListener("keydown", e => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    fn();
+  });
+}
+
+let keyboardUser = false;
+document.addEventListener("keydown", e => { if (e.key === "Tab" || e.key === "Enter" || e.key === " ") keyboardUser = true; }, true);
+document.addEventListener("pointerdown", () => { keyboardUser = false; }, true);
+
+function focusFirst(root) {
+  const f = root.querySelector("button, [tabindex='0']");
+  if (f) f.focus({ preventScroll: true });
+}
+
+// dialogs: the table behind is inert while any overlay is open
+function showOverlay(id) {
+  $(id).classList.add("show");
+  $("app").inert = true;
+  focusFirst($(id));
+}
+function hideOverlay(id) {
+  $(id).classList.remove("show");
+  const open = document.querySelectorAll(".overlay.show");
+  if (open.length) { focusFirst(open[open.length - 1]); return; }
+  $("app").inert = false;
+  // wait until the caller has dealt/rendered, then hand keyboard focus back to the table
+  setTimeout(() => {
+    if (!keyboardUser || !G || G.over || document.querySelector(".overlay.show")) return;
+    if ($("app").contains(document.activeElement)) return;
+    const target = $("hand").querySelector(".card.playable") || $("actions").querySelector("button") || $("deck");
+    target.focus({ preventScroll: true });
+  }, 0);
+}
+
+// suit emoji for the eye, suit name for screen readers
+const symHtml = id => '<span aria-hidden="true">' + suitOf(id).sym + '</span><span class="sr"> ' + t().suitNames[id] + "</span>";
+const cardName = card => t().cardName(card.rank, card.suit);
+
+function updateCornerLabels() {
+  document.documentElement.lang = LANG;
+  $("lang").textContent = LANG === "cs" ? "EN" : "CS";
+  $("lang").setAttribute("aria-label", t().langSwitch);
+  $("mute").textContent = soundOn ? "🔊" : "🔇";
+  $("mute").setAttribute("aria-label", soundOn ? t().muteLabel : t().unmuteLabel);
+}
 
 /* ---- animation helpers ---- */
 const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1032,10 +1178,10 @@ function rankLabel(rankId) { return t().ranks[rankId]; }
 function announce(card, who, chosenSuit) {
   const pair = rankLabel(card.rank);
   const s = suitOf(card.suit);
-  let msg = who + ": " + (pair[1] || pair[0]) + " " + s.sym;
+  let msg = who + ": " + (pair[1] || pair[0]) + " " + symHtml(s.id);
   if (card.rank === "7") msg += ' — <span class="warn">' + t().warnDraw(G.pendingDraw) + "</span>";
   if (card.rank === "eso") msg += ' — <span class="warn">' + t().warnStand + "</span>";
-  if (card.rank === "svrsek" && chosenSuit) msg += ' — <span class="warn">' + t().warnSuit(suitOf(chosenSuit).sym) + "</span>";
+  if (card.rank === "svrsek" && chosenSuit) msg += ' — <span class="warn">' + t().warnSuit(symHtml(chosenSuit)) + "</span>";
   $("status-text").innerHTML = msg;
 }
 function setStatus(msg) { $("status-text").innerHTML = msg; }
@@ -1054,8 +1200,7 @@ function cardEl(card, extraClass) {
 }
 
 function renderStatic() {
-  $("lang").textContent = LANG === "cs" ? "EN" : "CS";
-  $("mute").textContent = soundOn ? "🔊" : "🔇";
+  updateCornerLabels();
   $("lbl-draw").textContent = t().draw;
   $("lbl-pile").textContent = t().pile;
   $("suit-title").textContent = t().suitTitle;
@@ -1063,6 +1208,24 @@ function renderStatic() {
   $("menu-sub").textContent = t().menuSub;
   $("help").setAttribute("aria-label", t().rulesTitle);
   $("menu-rules").textContent = t().rulesLink;
+  const cw = $("continue-wrap");
+  cw.innerHTML = "";
+  if (savedMatch) {
+    const s = savedMatch;
+    const score = document.createElement("p");
+    score.className = "mini";
+    score.textContent = s.wins.map((w, i) => (i === 0 ? t().you : t().botName(i, s.pcount === 2)) + " " + w).join(" · ");
+    const b = document.createElement("button");
+    b.className = "big";
+    b.textContent = t().continueMatch;
+    onTap(b, () => {
+      SFX.tap();
+      hideOverlay("menu-overlay");
+      resumeMatch(s);
+    });
+    cw.appendChild(score);
+    cw.appendChild(b);
+  }
   $("rules-title").textContent = t().rulesTitle;
   $("rules-close").textContent = t().rulesOk;
   $("rules-list").innerHTML = t().rules
@@ -1073,12 +1236,10 @@ function renderStatic() {
   [2, 3, 4].forEach(n => {
     const b = document.createElement("button");
     b.innerHTML = n + "<span>" + t().playersWord + "</span>";
-    b.addEventListener("pointerdown", e => {
-      e.preventDefault();
+    onTap(b, () => {
       SFX.tap();
-      $("menu-overlay").classList.remove("show");
+      hideOverlay("menu-overlay");
       newMatch(n);
-      saveState();
     });
     wrap.appendChild(b);
   });
@@ -1086,16 +1247,18 @@ function renderStatic() {
   const tw = $("theme-buttons");
   tw.innerHTML = "";
   THEMES.forEach(th => {
-    const s = document.createElement("div");
+    const s = document.createElement("button");
     s.className = "swatch" + (th.id === THEME ? " sel" : "");
     s.style.background = "radial-gradient(circle at 35% 30%, " + th.a + ", " + th.b + ")";
-    s.addEventListener("pointerdown", e => {
-      e.preventDefault();
+    s.setAttribute("aria-label", t().themeWord + ": " + t().themeNames[th.id]);
+    s.setAttribute("aria-pressed", th.id === THEME);
+    onTap(s, () => {
       SFX.tap();
       THEME = th.id;
       applyTheme();
-      tw.querySelectorAll(".swatch").forEach(x => x.classList.remove("sel"));
+      tw.querySelectorAll(".swatch").forEach(x => { x.classList.remove("sel"); x.setAttribute("aria-pressed", "false"); });
       s.classList.add("sel");
+      s.setAttribute("aria-pressed", "true");
       saveState();
     });
     tw.appendChild(s);
@@ -1104,16 +1267,18 @@ function renderStatic() {
   const bw = $("back-buttons");
   bw.innerHTML = "";
   BACKS.forEach(bk => {
-    const s = document.createElement("div");
+    const s = document.createElement("button");
     s.className = "swatch-card" + (bk.id === BACK ? " sel" : "");
     s.style.background = bk.bg;
-    s.addEventListener("pointerdown", e => {
-      e.preventDefault();
+    s.setAttribute("aria-label", t().backWord + ": " + t().backNames[bk.id]);
+    s.setAttribute("aria-pressed", bk.id === BACK);
+    onTap(s, () => {
       SFX.tap();
       BACK = bk.id;
       applyBack();
-      bw.querySelectorAll(".swatch-card").forEach(x => x.classList.remove("sel"));
+      bw.querySelectorAll(".swatch-card").forEach(x => { x.classList.remove("sel"); x.setAttribute("aria-pressed", "false"); });
       s.classList.add("sel");
+      s.setAttribute("aria-pressed", "true");
       saveState();
     });
     bw.appendChild(s);
@@ -1121,6 +1286,8 @@ function renderStatic() {
 }
 
 function render() {
+  // keyboard focus inside the hand/actions survives the rebuild below
+  const focusKey = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.fk : null;
   $("score").textContent = "⭐ " + M.wins.map((w, i) => pName(i) + " " + w).join(" · ");
 
   // opponents around the table
@@ -1135,6 +1302,8 @@ function render() {
     const vert = seat === "seat-left" || seat === "seat-right";
     const cell = document.createElement("div");
     cell.className = "opp " + seat + (vert ? " vert" : "") + (G.turn === i && !G.over ? " turn" : "");
+    cell.setAttribute("role", "img");
+    cell.setAttribute("aria-label", pName(i) + ", " + G.hands[i].length + " " + t().cards);
     const label = document.createElement("div");
     label.className = "opp-label";
     label.textContent = pName(i) + " · " + G.hands[i].length;
@@ -1172,6 +1341,9 @@ function render() {
   }
 
   $("deck-count").textContent = G.deck.length;
+  $("deck").setAttribute("aria-label", t().draw + ", " + G.deck.length + " " + t().cards);
+  $("discard-wrap").setAttribute("aria-label", t().pile + ": " + cardName(topCard()) +
+    (G.activeSuit !== topCard().suit ? ", " + t().activeSuit(t().suitNames[G.activeSuit]) : ""));
 
   // hand — fanned so any count fits without scrolling
   const h = $("hand");
@@ -1189,6 +1361,11 @@ function render() {
     const can = G.turn === 0 && playable(card);
     if (can) anyPlayable = true;
     const el = cardEl(card, can ? "playable" : "dead");
+    el.setAttribute("role", "button");
+    el.setAttribute("aria-label", cardName(card));
+    if (!can) el.setAttribute("aria-disabled", "true");
+    el.tabIndex = 0;
+    el.dataset.fk = "c-" + cardKey(card);
     el.style.left = (x0 + idx * step) + "px";
     el.style.zIndex = idx + 1;
     el.style.setProperty("--r", ((idx - mid) * fan) + "deg");
@@ -1199,7 +1376,7 @@ function render() {
       el.classList.add("enter");
       el.style.animationDelay = (idx * 40) + "ms";
     }
-    if (can) el.addEventListener("pointerdown", e => { e.preventDefault(); playerPlay(idx); });
+    if (can) onTap(el, () => playerPlay(idx));
     h.appendChild(el);
   });
   prevHandKeys = newKeys;
@@ -1225,24 +1402,29 @@ function render() {
       addAction(t().actStand, playerDrawOrStand);
     }
   }
+
+  if (focusKey) {
+    const target = document.querySelector('[data-fk="' + focusKey + '"]') ||
+      h.querySelector(".card.playable") || a.querySelector("button") || h.querySelector(".card");
+    if (target) target.focus({ preventScroll: true });
+  }
 }
 
 function addAction(label, fn) {
   const b = document.createElement("button");
   b.textContent = label;
-  b.addEventListener("pointerdown", e => { e.preventDefault(); SFX.tap(); fn(); });
+  b.dataset.fk = "a-" + $("actions").children.length;
+  onTap(b, () => { SFX.tap(); fn(); });
   $("actions").appendChild(b);
 }
 
 /* deck tap = draw */
-$("deck").addEventListener("pointerdown", e => {
-  e.preventDefault();
+onTap($("deck"), () => {
   if (G && G.turn === 0 && !G.acePending) playerDrawOrStand();
 });
 
 /* language toggle */
-$("lang").addEventListener("pointerdown", e => {
-  e.preventDefault();
+onTap($("lang"), () => {
   LANG = LANG === "cs" ? "en" : "cs";
   saveState();
   renderStatic();
@@ -1253,10 +1435,9 @@ $("lang").addEventListener("pointerdown", e => {
 });
 
 /* sound toggle */
-$("mute").addEventListener("pointerdown", e => {
-  e.preventDefault();
+onTap($("mute"), () => {
   soundOn = !soundOn;
-  $("mute").textContent = soundOn ? "🔊" : "🔇";
+  updateCornerLabels();
   if (soundOn) SFX.tap();
   saveState();
 });
@@ -1281,31 +1462,31 @@ function openSuitPicker() {
   SUITS.forEach(s => {
     const b = document.createElement("button");
     b.textContent = s.sym;
-    b.addEventListener("pointerdown", e => { e.preventDefault(); confirmSuit(s.id); });
+    b.setAttribute("aria-label", t().suitNames[s.id]);
+    onTap(b, () => confirmSuit(s.id));
     wrap.appendChild(b);
   });
-  $("suit-overlay").classList.add("show");
+  showOverlay("suit-overlay");
 }
-function closeSuitPicker() { $("suit-overlay").classList.remove("show"); }
+function closeSuitPicker() { hideOverlay("suit-overlay"); }
 
 /* rules sheet — bots wait while it is open */
 function rulesOpen() { return $("rules-overlay").classList.contains("show"); }
 function openRules() {
   clearTimeout(botTimer);
   botTimer = null;
-  $("rules-overlay").classList.add("show");
+  showOverlay("rules-overlay");
 }
 function closeRules() {
-  $("rules-overlay").classList.remove("show");
+  hideOverlay("rules-overlay");
   scheduleBot();
 }
-$("help").addEventListener("pointerdown", e => {
-  e.preventDefault();
+onTap($("help"), () => {
   SFX.tap();
   if (rulesOpen()) closeRules(); else openRules();
 });
-$("menu-rules").addEventListener("pointerdown", e => { e.preventDefault(); SFX.tap(); openRules(); });
-$("rules-close").addEventListener("pointerdown", e => { e.preventDefault(); SFX.tap(); closeRules(); });
+onTap($("menu-rules"), () => { SFX.tap(); openRules(); });
+onTap($("rules-close"), () => { SFX.tap(); closeRules(); });
 
 /* Esc closes the rules sheet or cancels the suit picker (no preventDefault — Playables requirement) */
 document.addEventListener("keydown", e => {
@@ -1319,12 +1500,11 @@ document.addEventListener("keydown", e => {
 });
 
 /* round / match continue */
-$("again").addEventListener("pointerdown", e => {
-  e.preventDefault();
+onTap($("again"), () => {
   SFX.tap();
-  $("result-overlay").classList.remove("show");
+  hideOverlay("result-overlay");
   if ($("again").dataset.mode === "match") {
-    $("menu-overlay").classList.add("show");
+    showOverlay("menu-overlay");
   } else {
     newRound();
   }
@@ -1339,7 +1519,7 @@ loadState().then(() => {
   applyTheme();
   applyBack();
   renderStatic();
-  $("menu-overlay").classList.add("show");
+  showOverlay("menu-overlay");
   if (YT) { try { YT.game.gameReady(); } catch (e) {} }
 });
 })();
